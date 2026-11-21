@@ -23,23 +23,35 @@ class Movie < ApplicationRecord
       query_params[:year] = search_terms[:release_year]
     end
 
-    if search_terms[:language] == 'en'
-      query_params[:language] = 'en-US'
-    end
-
     response = Faraday.get(url, query_params)
 
-    return [] unless response.success?
+    unless response.success?
+      Rails.logger.error("TMDb API request failed: HTTP #{response.status}")
+      return []
+    end
 
     data = JSON.parse(response.body)
+    results = data.fetch('results', [])
 
-    data['results'].map do |movie|
-      Movie.new(
+    if search_terms[:language] == 'en'
+      results = results.select do |movie|
+        movie['original_language'] == 'en'
+      end
+    end
+
+    results.filter_map do |movie|
+      result = Movie.new(
         title: movie['title'],
         release_date: movie['release_date'],
         rating: 'R'
       )
+
+      unless Movie.exists?(
+        title: result.title,
+        release_date: result.release_date
+      )
+        result
+      end
     end
   end
-
 end
